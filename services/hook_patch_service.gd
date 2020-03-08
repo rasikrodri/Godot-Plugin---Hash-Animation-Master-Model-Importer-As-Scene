@@ -36,6 +36,3 @@ class HookPathService:
 			hook_patches.invert()
 		pass
 		
-	
-		
-	

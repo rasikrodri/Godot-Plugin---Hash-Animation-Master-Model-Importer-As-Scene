@@ -16,7 +16,7 @@ class CP:
 	#Assigned in a separate funciton becasue we have to load all the cps first
 	var host_cp : CP 
 	
-	#The cp that is attached to this cp, and depends on this cp to ge the position
+	#The cp that is attached to this cp, and depends on this cp to get the position
 	#Assigned in a separate funciton becasue we have to load all the cps first
 	var client_cp : CP #
 	
@@ -137,6 +137,23 @@ class CP:
 		return _main_cp_host
 		pass
 		
+	#this will get the first host cp that is not a hook cp
+	#example a hook is the client of a normal cp that in turn
+	#is a client of another hook(from an unrealted spline)
+	#that in turn is a client of the main host cp
+	var FirstHostNoneHookCp:CP
+	func GetFirstHostNoneHookCp()->CP:
+		if FirstHostNoneHookCp != null: return FirstHostNoneHookCp
+		if _hosts_position:
+			FirstHostNoneHookCp = self
+		elif not host_cp.is_hook:
+			FirstHostNoneHookCp = host_cp
+		else:
+			FirstHostNoneHookCp = host_cp.get_main_cp_host()
+			
+		return FirstHostNoneHookCp
+		pass
+		
 	#Used for hook cps to get how far the hook is from
 	#the main host cp
 	var _hook_order_num:int
@@ -149,7 +166,7 @@ class CP:
 			return _hook_order_num
 		else:
 			return _hook_order_num
-		
+		pass
 		
 	func add_bone_data(bw):
 		var h = get_main_cp_host()

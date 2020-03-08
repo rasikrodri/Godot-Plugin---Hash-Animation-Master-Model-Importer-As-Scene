@@ -176,12 +176,12 @@ class AmMeshBuilder:
 		#be hooked to a parent that it's main host is the same for both
 		for i in range(hook_patches.size()):
 			var hook_patch = hook_patches[i]
-			var patchesSectionId = str(hook_patch.hook_cps[0].get_main_cp_host_num()) + str(hook_patch.hook_cps[0].host_cp_num)
+			var patchesSectionId = hook_patch.hook_cps[0].GetFirstHostNoneHookCp().cp_num
 			if not section_and_its_patches.has(patchesSectionId):
 				section_and_its_patches[patchesSectionId] = []
 				
 			section_and_its_patches[patchesSectionId].append(hook_patch)
-			
+		
 		var hook_patch_service = _hook_patch_service_resource.HookPathService.new()
 		
 #		#Sort each array by the percent distance from host cp 
@@ -220,14 +220,14 @@ class AmMeshBuilder:
 			_add_polygon(poly_data)
 			
 		
-		var t = 0
-		if _is_hooks_patches_an_even_build(ordered_sibbling_patches.size()):
-			#Fill the center with a triangle
-			_add_center_poly(polys_data, left_cp_data, right_cp_data)
-		else:
-			#Fill the center with a square/two trinagles
-			_AddCenterSquarePolygons(polys_data, ordered_sibbling_patches.size())
-		pass
+#		var t = 0
+#		if _is_hooks_patches_an_even_build(ordered_sibbling_patches.size()):
+		#Fill the center with a triangle
+		_add_center_poly(polys_data, left_cp_data, right_cp_data)
+#		else:
+#			#Fill the center with a square/two trinagles
+#			_AddCenterSquarePolygons(polys_data, ordered_sibbling_patches.size())
+#		pass
 		
 	func _get_left_cp_data(firstPatch)->PolygonData:
 		var index:int = 0
