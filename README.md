@@ -14,7 +14,7 @@ Godot Plugin to import Hash Animation Master models and their actions into Godot
 
 The images/textures and actions can be placed in the same folder than the model or in a subfolder.***
 
-**A good practice is to have the model and the textures in godot from the beginning as you model and apply decals in order to make sure everything is looking like you want it to look.**
+-----**A good practice is to have the model and the textures in godot from the beginning as you model and apply decals in order to make sure everything is looking like you want it to look in teh game.**-----
 
 
 
