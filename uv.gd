@@ -1,7 +1,7 @@
 class UV:
-	var cp
-	var coords:Vector2
+	var Cp
+	var Coords:Vector2
 	func _init(cp, coords:Vector2):
-		self.cp = cp
-		self.coords = coords
+		self.Cp = cp
+		self.Coords = coords
 		pass

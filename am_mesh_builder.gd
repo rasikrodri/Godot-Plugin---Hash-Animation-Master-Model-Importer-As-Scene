@@ -7,10 +7,8 @@ class AmMeshBuilder:
 	var _decal1
 	var _decal2
 	
-	var _hook_and_left_cp : Dictionary ={}
-	
 	var _mesh_builder_resource = preload("res://addons/AMModelImporterAsScene/mesh_builder.gd")
-	var _hook_patch_service_resource:Resource = preload("res://addons/AMModelImporterAsScene/services/hook_patch_service.gd")
+	var _hookPatchResource:Resource = preload("res://addons/AMModelImporterAsScene/services/hook_patch.gd")
 	
 	var zeroed_normals : Array = [Vector3(0,0,0)]
 	var zeroed_normals_indexes :Array = [0,0,0,0,0]
@@ -31,7 +29,7 @@ class AmMeshBuilder:
 		
 	func build_mesh(options:Dictionary)->ArrayMesh:
 		_builder = _mesh_builder_resource.MeshBuilder.new()
-		var hook_patches:Array = []
+		var patchesWithHooks:Array = []
 		
 		if _normals.size() == 0:
 			_normals = zeroed_normals
@@ -39,16 +37,16 @@ class AmMeshBuilder:
 		for i in range(_model_patches.size()):
 			var patch = _model_patches[i]
 			if patch.from_hook:
-				hook_patches.append(patch)
+				patchesWithHooks.append(patch)
 			else:
 				_build_4_and_5_points_patch(patch)
 
-		_build_hook_patches(hook_patches)
+		_build_hook_patches(patchesWithHooks)
 		var mat : SpatialMaterial = SpatialMaterial.new()
 		mat.albedo_color = Color(1.0, 1.0, 1.0, 1.0)
 		mat.albedo_texture = null
 		
-		#Only load images that are in teh same folder than the model, for now!
+		#Only load images that are in the same folder than the model, for now!
 		if not _decal1 == null:
 			mat.albedo_texture = _get_texture(_decal1.albedo_image)
 			mat.metallic_texture = _get_texture(_decal1.specular_intensity_image)
@@ -104,12 +102,12 @@ class AmMeshBuilder:
 			normals_indexes = zeroed_normals_indexes
 		
 		if not uvs1.empty():
-			uv1_0 = uvs1[0].coords
-			uv1_1 = uvs1[1].coords
-			uv1_2 = uvs1[2].coords
-			uv1_3 = uvs1[3].coords
+			uv1_0 = uvs1[0].Coords
+			uv1_1 = uvs1[1].Coords
+			uv1_2 = uvs1[2].Coords
+			uv1_3 = uvs1[3].Coords
 			if uvs1.size() == 5:
-				uv1_4 = uvs1[4].coords
+				uv1_4 = uvs1[4].Coords
 		else:
 			uv1_0 = vect2
 			uv1_1 = vect2
@@ -155,191 +153,168 @@ class AmMeshBuilder:
 			) 
 		pass
 		
-	func _build_hook_patches(hook_patches:Array)->void:
-		if hook_patches.size() == 0: return
+	func _build_hook_patches(patchesWithHooks:Array)->void:
+		if patchesWithHooks.size() == 0: return
 		
-		#Dictionary of arrays that containing the patches in order, accordint to the
-		#distance percent it is attached to the cp
-		var section_and_its_patches:Dictionary = {}
+		#Oder them to forst create the left patches then the middle ones and then
+		#the center ones. This wa we can easily get the uvs and normals from
+		#the correct cps
+		var edgeLeftPatches:Dictionary = {}
+		var edgeMiddlePatches:Dictionary = {}
 		
-		#Collect all the continuous hook patches
-		#Becasue you can have more than one hook attached to the same spline section
-		#a hook patch can have 2 hooks 
+		var leftSidePatches:Array = []
+		var middlePatches:Array = []
+		var rightSidePatches:Array = []
+		for i in range(patchesWithHooks.size()):
+			var hookPatch = _hookPatchResource.HookPatch.new(patchesWithHooks[i])		
+			var edgeId:String
+			if hookPatch.IsPatchOnLeft():
+				leftSidePatches.append(hookPatch)
+			elif hookPatch.IsPstchInMiddle():
+				middlePatches.append(hookPatch)
+			else:#it is a right side patch
+				rightSidePatches.append(hookPatch)
 		
-		#The main host of all of the hooks cps in a hooks patch is allways
-		# the cp of the spline to which the first hook cp is attacehd too.
-		#Becasue of this, in order to determine if the hook patches are siblings
-		#we just need to get the main host of any of the hook cps of the patches
-		#in order to determine that they are in the same spline section
-		#But also make sure the (direct)host cp of the hook i son the same spline
-		#this is because a hook in a patch perpendiculat to another patch hook can
-		#be hooked to a parent that it's main host is the same for both
-		for i in range(hook_patches.size()):
-			var hook_patch = hook_patches[i]
-			var patchesSectionId = hook_patch.hook_cps[0].GetFirstHostNoneHookCp().cp_num
-			if not section_and_its_patches.has(patchesSectionId):
-				section_and_its_patches[patchesSectionId] = []
-				
-			section_and_its_patches[patchesSectionId].append(hook_patch)
-		
-		var hook_patch_service = _hook_patch_service_resource.HookPathService.new()
-		
-#		#Sort each array by the percent distance from host cp 
-		var patches:Array = section_and_its_patches.values()
-		var patchesService = _hook_patch_service_resource.HookPathService.new()
-		var all_ordered_patches:Array=[]
-		for i in range(patches.size()):
-			all_ordered_patches.append(patchesService.get_hook_patches(patches[i]))
+		#left polygons
+		for i in range(leftSidePatches.size()):
+			var hookPatch = leftSidePatches[i]
+			var edgeId = _GenerateEdgeId(hookPatch, 0, 2)
+			edgeLeftPatches[edgeId] = hookPatch
+			_add_polygon(_GetPolyonData(hookPatch, 0, 1, 2))
 			
-		for i in range(all_ordered_patches.size()):
-			#This should not be nessesary becasue Am seems to not allow
-			#More than 3 hooks per patch
-			_build_hooks_sections_patches(all_ordered_patches[i])
+		#midle polygons
+		_CreateMiddlePolygons(middlePatches, edgeLeftPatches,edgeMiddlePatches)
+			
+		#Right polygons
+		_CreateRightPolygons(rightSidePatches, edgeLeftPatches,edgeMiddlePatches)
+			
 		pass
 		
-	func _build_hooks_sections_patches(ordered_sibbling_patches:Array)->void:
-#		if ordered_sibbling_patches.size() > 2:
-#			var ddd = 0
-		
-		
-		var left_cp_data:PolygonData = _get_left_cp_data(ordered_sibbling_patches.front())
-		var right_cp_data:PolygonData = _get_right_cp_data(ordered_sibbling_patches.back())
-		
-		var left_count:int = ordered_sibbling_patches.size()/2
-		var polys_data:Array = []
-		for i in range(ordered_sibbling_patches.size()):
-			var poly_data : PolygonData
-			if i == ordered_sibbling_patches.size() -1:#last right polygon
-				poly_data = _get_last_right_hook_poly_data(ordered_sibbling_patches[i], right_cp_data)
-			elif i < left_count:#Left polygons
-				poly_data = _get_hook_poly_data(ordered_sibbling_patches[i], left_cp_data)
-			else:#right polygons
-				poly_data = _get_hook_poly_data(ordered_sibbling_patches[i], right_cp_data)
+	func _CreateMiddlePolygons(middlePatches:Array, edgeLeftPatches:Dictionary, edgeMiddlePatches:Dictionary)->void:
+		var middlePatchesCopy:Array = middlePatches.duplicate()
+		var originalSize:int = middlePatchesCopy.size()
+		for i in range(middlePatchesCopy.size()):
+			var hookPatch = middlePatches[i]
+			var edgeIdLeftToRight = _GenerateEdgeId(hookPatch, 0, 1)
+			var edgeIdRightToLeft = _GenerateEdgeId(hookPatch, 2, 3)
+			
+			var polygonCreated:bool = true
+			if edgeLeftPatches.has(edgeIdLeftToRight):
+				hookPatch.PreviewsHookPatch = edgeLeftPatches[edgeIdLeftToRight]
+				_add_polygon(_GetPolyonDataForTwoSides(hookPatch, 1, 2, hookPatch.GetFirstHookPatch(), 0))
+				edgeMiddlePatches[_GenerateEdgeId(hookPatch, 3, 2)] = hookPatch
+			elif edgeLeftPatches.has(edgeIdRightToLeft):
+				hookPatch.PreviewsHookPatch = edgeLeftPatches[edgeIdRightToLeft]
+				_add_polygon(_GetPolyonDataForTwoSides(hookPatch, 1, 2, hookPatch.GetFirstHookPatch(), 3))
+				edgeMiddlePatches[_GenerateEdgeId(hookPatch, 1, 0)] = hookPatch
+			elif edgeMiddlePatches.has(edgeIdLeftToRight):
+				hookPatch.PreviewsHookPatch = edgeMiddlePatches[edgeIdLeftToRight]
+				_add_polygon(_GetPolyonDataForTwoSides(hookPatch, 1, 2, hookPatch.GetFirstHookPatch(), 0))
+				edgeMiddlePatches[_GenerateEdgeId(hookPatch, 3, 2)] = hookPatch
+			elif edgeMiddlePatches.has(edgeIdRightToLeft):
+				hookPatch.PreviewsHookPatch = edgeMiddlePatches[edgeIdRightToLeft]
+				_add_polygon(_GetPolyonDataForTwoSides(hookPatch, 1, 2, hookPatch.GetFirstHookPatch(), 3))
+				edgeMiddlePatches[_GenerateEdgeId(hookPatch, 3, 2)] = hookPatch
+			else:
+				polygonCreated = false
 				
-			polys_data.append(poly_data)
-			_add_polygon(poly_data)
+			if polygonCreated: middlePatchesCopy.erase(hookPatch)
 			
+		#Exit if we could not create the polygons so that we do not
+		#keep calling the same function for ever
+		if middlePatchesCopy.size() == originalSize: return
 		
-#		var t = 0
-#		if _is_hooks_patches_an_even_build(ordered_sibbling_patches.size()):
-		#Fill the center with a triangle
-		_add_center_poly(polys_data, left_cp_data, right_cp_data)
-#		else:
-#			#Fill the center with a square/two trinagles
-#			_AddCenterSquarePolygons(polys_data, ordered_sibbling_patches.size())
-#		pass
+		#This is nessesary becasue middle patches are going to only find it's previews patch.
+		#If the patches are not in order form first to last patch in the patches section
+		#Then some patches will be skiped and we need to call this function again.
+		if middlePatchesCopy.size() > 0: _CreateMiddlePolygons(middlePatchesCopy, edgeLeftPatches, edgeMiddlePatches)
+		pass
 		
-	func _get_left_cp_data(firstPatch)->PolygonData:
-		var index:int = 0
-		var left_cp = firstPatch.OrderedCps[index]
-		var data = PolygonData.new()
-		data.pos_1 = left_cp.get_position()
-		data.norm_1 = _normals[firstPatch.OrderedNormIndexes[index]] if firstPatch.OrderedNormIndexes.size() > 0 else Vector3()
-		
-		if firstPatch.OrderedUvs1 == null or firstPatch.OrderedUvs1.empty():
-			data.uv_1 = Vector2()
-		else:
-			data.uv_1 = firstPatch.OrderedUvs1[index].coords
+	func _CreateRightPolygons(rightSidePatches:Array, edgeLeftPatches:Dictionary, edgeMiddlePatches:Dictionary)->void:
+		for i in range(rightSidePatches.size()):
+			var hookPatch = rightSidePatches[i]
+			var edgeIdLeftToRight = _GenerateEdgeId(hookPatch, 2, 3)
+			var edgeIdRightToLeft = _GenerateEdgeId(hookPatch, 3, 0)
+			var midEdgeIdLeftToRight = _GenerateEdgeId(hookPatch, 3, 0)
+			var midIdRightToLeft = _GenerateEdgeId(hookPatch, 2, 2)
 			
-		data.uv_2 = data.uv_1 
-		data.bone_data_1 = left_cp.get_bones_data()
+			if edgeLeftPatches.has(edgeIdLeftToRight):
+				hookPatch.PreviewsHookPatch = edgeLeftPatches[edgeIdLeftToRight]
+				_add_polygon(_GetPolyonDataForTwoSides(hookPatch, 0, 2, hookPatch.GetFirstHookPatch(), 3))
+				_add_polygon(_GetPolyonData(hookPatch, 0, 1, 2))
+			elif edgeLeftPatches.has(edgeIdRightToLeft):
+				hookPatch.PreviewsHookPatch = edgeLeftPatches[edgeIdRightToLeft]
+				_add_polygon(_GetPolyonDataForTwoSides(hookPatch, 0, 2, hookPatch.GetFirstHookPatch(), 0))
+				_add_polygon(_GetPolyonData(hookPatch, 0, 1, 2))
+			elif edgeMiddlePatches.has(midEdgeIdLeftToRight):
+				hookPatch.PreviewsHookPatch = edgeMiddlePatches[midEdgeIdLeftToRight]
+				_add_polygon(_GetPolyonDataForTwoSides(hookPatch, 0, 2, hookPatch.GetFirstHookPatch(), 0))
+				_add_polygon(_GetPolyonData(hookPatch, 0, 1, 2))
+			elif edgeMiddlePatches.has(midIdRightToLeft):
+				hookPatch.PreviewsHookPatch = edgeMiddlePatches[midIdRightToLeft]
+				_add_polygon(_GetPolyonDataForTwoSides(hookPatch, 0, 2, hookPatch.GetFirstHookPatch(), 3))
+				_add_polygon(_GetPolyonData(hookPatch, 0, 1, 2))
+		pass
+		
+	func _GenerateEdgeId(hookPatch, vetIndex1:int, verIndex2:int)->String:
+		return str(hookPatch.OrderedCps[vetIndex1].get_main_cp_host_num()) + "-" +str(hookPatch.OrderedCps[verIndex2].get_main_cp_host_num())
+		pass
+		
+	func _GetPolyonDataForTwoSides(leftHookPatch, leftIndexForVert1:int, leftIndexForVert2:int,
+									rightHookPatch, rightIndexForVert3:int)->PolygonData:
+		var data:PolygonData = PolygonData.new()
+		
+		var hasNormals:bool = leftHookPatch.OrderedNormIndexes.size() > 0
+		var hasUvs1:bool = leftHookPatch.OrderedUvs1.size() > 0
+		var hasUvs2:bool = leftHookPatch.OrderedUvs2.size() > 0
+		
+		data.pos_1 = leftHookPatch.OrderedCps[leftIndexForVert1].get_position()
+		if hasNormals: data.norm_1 = leftHookPatch.OrderedNormIndexes[leftIndexForVert1]
+		if hasUvs1: data.uv_1 = leftHookPatch.OrderedUvs1[leftIndexForVert1].Coords
+		if hasUvs2: data.uv2_1 = leftHookPatch.OrderedUvs2[leftIndexForVert1].Coords
+		data.bone_data_1 = leftHookPatch.OrderedCps[leftIndexForVert1].get_bones_data()	
+		
+		data.pos_2 = leftHookPatch.OrderedCps[leftIndexForVert2].get_position()
+		if hasNormals: data.norm_2 = leftHookPatch.OrderedNormIndexes[leftIndexForVert2]
+		if hasUvs1: data.uv_2 = leftHookPatch.OrderedUvs1[leftIndexForVert2].Coords
+		if hasUvs2: data.uv2_2 = leftHookPatch.OrderedUvs2[leftIndexForVert2].Coords
+		data.bone_data_2 = leftHookPatch.OrderedCps[leftIndexForVert2].get_bones_data()		
+		
+		data.pos_3 = rightHookPatch.OrderedCps[rightIndexForVert3].get_position()
+		if hasNormals: data.norm_3 = rightHookPatch.OrderedNormIndexes[rightIndexForVert3]
+		if hasUvs1: data.uv_3 = rightHookPatch.OrderedUvs1[rightIndexForVert3].Coords
+		if hasUvs2: data.uv2_3 = rightHookPatch.OrderedUvs2[rightIndexForVert3].Coords
+		data.bone_data_3 = rightHookPatch.OrderedCps[rightIndexForVert3].get_bones_data()
+		
 		return data
 		pass
+	
+	func _GetPolyonData(hookPatch, vert1Index:int, vert2Index:int, vert3Index:int)->PolygonData:
+		var data:PolygonData = PolygonData.new()
 		
-	func _get_right_cp_data(lastPatch)->PolygonData:
-		var index:int=2
-		var right_cp = lastPatch.OrderedCps[index]
-		var data = PolygonData.new()
-		data.pos_1 = right_cp.get_position()
-		data.norm_1 = _normals[lastPatch.OrderedNormIndexes[index]] if lastPatch.OrderedNormIndexes.size() > 0 else Vector3()
+		var hasNormals:bool = hookPatch.OrderedNormIndexes.size() > 0
+		var hasUvs1:bool = hookPatch.OrderedUvs1.size() > 0
+		var hasUvs2:bool = hookPatch.OrderedUvs2.size() > 0
 		
-		if lastPatch.OrderedUvs1 == null or lastPatch.OrderedUvs1.empty():
-			data.uv_1 = Vector2()
-		else:
-			data.uv_1 = lastPatch.OrderedUvs1[index].coords
+		data.pos_1 = hookPatch.OrderedCps[vert1Index].get_position()
+		if hasNormals: data.norm_1 = hookPatch.OrderedNormIndexes[vert1Index]
+		if hasUvs1: data.uv_1 = hookPatch.OrderedUvs1[vert1Index].Coords
+		if hasUvs2: data.uv2_1 = hookPatch.OrderedUvs2[vert1Index].Coords
+		data.bone_data_1 = hookPatch.OrderedCps[vert1Index].get_bones_data()	
 		
-		data.uv_2 = data.uv_1 
-		data.bone_data_1 = right_cp.get_bones_data()
+		data.pos_2 = hookPatch.OrderedCps[vert2Index].get_position()
+		if hasNormals: data.norm_2 = hookPatch.OrderedNormIndexes[vert2Index]
+		if hasUvs1: data.uv_2 = hookPatch.OrderedUvs1[vert2Index].Coords
+		if hasUvs2: data.uv2_2 = hookPatch.OrderedUvs2[vert2Index].Coords
+		data.bone_data_2 = hookPatch.OrderedCps[vert2Index].get_bones_data()		
+		
+		data.pos_3 = hookPatch.OrderedCps[vert3Index].get_position()
+		if hasNormals: data.norm_3 = hookPatch.OrderedNormIndexes[vert3Index]
+		if hasUvs1: data.uv_3 = hookPatch.OrderedUvs1[vert3Index].Coords
+		if hasUvs2: data.uv2_3 = hookPatch.OrderedUvs2[vert3Index].Coords
+		data.bone_data_3 = hookPatch.OrderedCps[vert3Index].get_bones_data()
+		
 		return data
-		pass
-		
-	func _add_center_poly(polys_data:Array, left_data:PolygonData, right_data:PolygonData)->void:
-		var half:int = polys_data.size()/2
-		var centerCpPolyData:PolygonData = polys_data[half - 1]
-		
-		var new_poly_data:PolygonData = PolygonData.new()
-		new_poly_data.pos_1 = left_data.pos_1 
-		new_poly_data.pos_2 = centerCpPolyData.pos_2
-		new_poly_data.pos_3 = right_data.pos_1
-		
-		new_poly_data.norm_1 = left_data.norm_1
-		new_poly_data.norm_2 = centerCpPolyData.norm_2
-		new_poly_data.norm_3 = right_data.norm_1
-		
-		new_poly_data.uv_1 = left_data.uv_1
-		new_poly_data.uv_2 = centerCpPolyData.uv_2
-		new_poly_data.uv_3 = right_data.uv_1
-		
-		new_poly_data.uv2_1 = left_data.uv2_1
-		new_poly_data.uv2_2 = centerCpPolyData.uv2_2
-		new_poly_data.uv2_3 = right_data.uv2_1
-		
-		new_poly_data.bone_data_1 = left_data.bone_data_1
-		new_poly_data.bone_data_2 = centerCpPolyData.bone_data_2
-		new_poly_data.bone_data_3 = right_data.bone_data_1
-		_add_polygon(new_poly_data)
-		pass
-		
-	func _AddCenterSquarePolygons(polys_data:Array, totalPatches:int)->void:
-		var left_count = totalPatches / 2
-		var left_data:PolygonData = polys_data[left_count - 1]
-		var right_data:PolygonData = polys_data[left_count - 1]
-		
-		#Actual cps = 0,2,(2) - 2,(0),(2)
-		#Positions as PolygonData = 3,2,(2) - 2,(3),(2)
-		var new_poly_data:PolygonData = PolygonData.new()
-		new_poly_data.pos_1 = left_data.pos_3
-		new_poly_data.pos_2 = left_data.pos_2
-		new_poly_data.pos_3 = right_data.pos_2
-		
-		new_poly_data.norm_1 = left_data.norm_3
-		new_poly_data.norm_2 = left_data.norm_2
-		new_poly_data.norm_3 = right_data.norm_2
-		
-		new_poly_data.uv_1 = left_data.uv_3
-		new_poly_data.uv_2 = left_data.uv_2
-		new_poly_data.uv_3 = right_data.uv_2
-		
-		new_poly_data.uv2_1 = left_data.uv2_3
-		new_poly_data.uv2_2 = left_data.uv2_2
-		new_poly_data.uv2_3 = right_data.uv2_2
-		
-		new_poly_data.bone_data_1 = left_data.bone_data_3
-		new_poly_data.bone_data_2 = left_data.bone_data_2
-		new_poly_data.bone_data_3 = right_data.bone_data_2
-		_add_polygon(new_poly_data)
-		
-		new_poly_data = PolygonData.new()
-		new_poly_data.pos_1 = left_data.pos_2
-		new_poly_data.pos_2 = right_data.pos_3
-		new_poly_data.pos_3 = right_data.pos_2
-		
-		new_poly_data.norm_1 = left_data.norm_2
-		new_poly_data.norm_2 = right_data.norm_3
-		new_poly_data.norm_3 = right_data.norm_2
-		
-		new_poly_data.uv_1 = left_data.uv_2
-		new_poly_data.uv_2 = right_data.uv_3
-		new_poly_data.uv_3 = right_data.uv_2
-		
-		new_poly_data.uv2_1 = left_data.uv2_2
-		new_poly_data.uv2_2 = right_data.uv2_3
-		new_poly_data.uv2_3 = right_data.uv2_2
-		
-		new_poly_data.bone_data_1 = left_data.bone_data_2
-		new_poly_data.bone_data_2 = right_data.bone_data_3
-		new_poly_data.bone_data_3 = right_data.bone_data_2
-		_add_polygon(new_poly_data)
 		pass
 		
 	func _add_polygon(poly_data:PolygonData)->void:
@@ -350,122 +325,6 @@ class AmMeshBuilder:
 					poly_data.uv2_1, poly_data.uv2_2, poly_data.uv2_3,
 					poly_data.bone_data_1, poly_data.bone_data_2, poly_data.bone_data_3
 				)
-		pass
-		
-	func _is_hooks_patches_an_even_build(patches_count:int)->bool:
-		var count_str:String = str(patches_count)
-		var last_num:String = count_str.left(1)
-		match(last_num):
-			"2", "4", "6", "8", "0":
-				return true
-			_:
-				return false
-		pass
-			
-	func _get_hook_poly_data(hookPatch, corner_cp_data:PolygonData)->PolygonData:
-		var uv1_0 : Vector2
-		var uv1_1 : Vector2
-		var uv1_2 : Vector2
-		var uv1_3 : Vector2
-		var uv1_4 : Vector2
-		var uv2_0 : Vector2
-		var uv2_1 : Vector2
-		var uv2_2 : Vector2
-		var uv2_3 : Vector2
-		var uv2_4 : Vector2
-		var normals_indexes:Array = hookPatch.OrderedNormIndexes
-		var uvs1 : Array = []
-		var uvs2 : Array = []
-		
-		if normals_indexes.size() == 0:
-				normals_indexes = zeroed_normals_indexes
-		
-		if not hookPatch.OrderedUvs1.empty():
-			uv1_0 = hookPatch.OrderedUvs1[0].coords
-			uv1_1 = hookPatch.OrderedUvs1[1].coords
-			uv1_2 = hookPatch.OrderedUvs1[2].coords
-			uv1_3 = hookPatch.OrderedUvs1[3].coords
-			if hookPatch.OrderedUvs1.size() == 5:
-				uv1_4 = hookPatch.OrderedUvs1[4].coords
-		if not hookPatch.OrderedUvs2.empty():
-			uv2_0 = hookPatch.OrderedUvs2[0].coords
-			uv2_1 = hookPatch.OrderedUvs2[1].coords
-			uv2_2 = hookPatch.OrderedUvs2[2].coords
-			uv2_3 = hookPatch.OrderedUvs2[3].coords
-			if hookPatch.OrderedUvs2.size() == 5:
-				uv2_4 = hookPatch.OrderedUvs2[4].coords
-			
-			
-		var data:PolygonData = PolygonData.new()
-		data.pos_1 = hookPatch.OrderedCps[1].get_position()
-		data.pos_2 = hookPatch.OrderedCps[2].get_position()
-		data.pos_3 = corner_cp_data.pos_1
-		data.norm_1 = _normals[normals_indexes[1]]
-		data.norm_2 = _normals[normals_indexes[2]]
-		data.norm_3 = corner_cp_data.norm_1
-		data.uv_1 = uv1_1
-		data.uv_2 = uv1_2
-		data.uv_3 = corner_cp_data.uv_1
-		data.uv2_1 = uv2_1
-		data.uv2_2 = uv2_2
-		data.uv2_3 = corner_cp_data.uv2_1
-		data.bone_data_1 = hookPatch.OrderedCps[1].get_bones_data()
-		data.bone_data_2 = hookPatch.OrderedCps[2].get_bones_data()
-		data.bone_data_3 = corner_cp_data.bone_data_1
-		return data
-		pass
-		
-	func _get_last_right_hook_poly_data(hookPatch, right_cp_data:PolygonData)->PolygonData:
-		var uv1_0 : Vector2
-		var uv1_1 : Vector2
-		var uv1_2 : Vector2
-		var uv1_3 : Vector2
-		var uv1_4 : Vector2
-		var uv2_0 : Vector2
-		var uv2_1 : Vector2
-		var uv2_2 : Vector2
-		var uv2_3 : Vector2
-		var uv2_4 : Vector2
-		var normals_indexes:Array = hookPatch.OrderedNormIndexes
-		var uvs1 : Array = []
-		var uvs2 : Array = []
-		
-		if normals_indexes.size() == 0:
-				normals_indexes = zeroed_normals_indexes
-		
-		if not hookPatch.OrderedUvs1.empty():
-			uv1_0 = hookPatch.OrderedUvs1[0].coords
-			uv1_1 = hookPatch.OrderedUvs1[1].coords
-			uv1_2 = hookPatch.OrderedUvs1[2].coords
-			uv1_3 = hookPatch.OrderedUvs1[3].coords
-			if hookPatch.OrderedUvs1.size() == 5:
-				uv1_4 = hookPatch.OrderedUvs1[4].coords
-		if not hookPatch.OrderedUvs2.empty():
-			uv2_0 = hookPatch.OrderedUvs2[0].coords
-			uv2_1 = hookPatch.OrderedUvs2[1].coords
-			uv2_2 = hookPatch.OrderedUvs2[2].coords
-			uv2_3 = hookPatch.OrderedUvs2[3].coords
-			if hookPatch.OrderedUvs2.size() == 5:
-				uv2_4 = hookPatch.OrderedUvs2[4].coords
-
-
-		var data:PolygonData = PolygonData.new()
-		data.pos_1 = hookPatch.OrderedCps[0].get_position()
-		data.pos_2 = hookPatch.OrderedCps[1].get_position()
-		data.pos_3 = hookPatch.OrderedCps[2].get_position()
-		data.norm_1 = _normals[normals_indexes[0]]
-		data.norm_2 = _normals[normals_indexes[1]]
-		data.norm_3 = _normals[normals_indexes[2]]
-		data.uv_1 = uv1_0
-		data.uv_2 = uv1_1
-		data.uv_3 = uv1_2
-		data.uv2_1 = uv2_0
-		data.uv2_2 = uv2_1
-		data.uv2_3 = uv2_2
-		data.bone_data_1 = hookPatch.OrderedCps[0].get_bones_data()
-		data.bone_data_2 = hookPatch.OrderedCps[1].get_bones_data()
-		data.bone_data_3 = hookPatch.OrderedCps[2].get_bones_data()
-		return data
 		pass
 		
 	class PolygonData:

@@ -15,9 +15,9 @@ class PatchUvs:
 		
 	func generate_patch_id()->String:
 		return id_generator.generate_id([
-			uvs[0].cp.get_main_cp_host_num(), 
-			uvs[1].cp.get_main_cp_host_num(),
-			uvs[2].cp.get_main_cp_host_num(), 
-			uvs[3].cp.get_main_cp_host_num()
+			uvs[0].Cp.get_main_cp_host_num(), 
+			uvs[1].Cp.get_main_cp_host_num(),
+			uvs[2].Cp.get_main_cp_host_num(), 
+			uvs[3].Cp.get_main_cp_host_num()
 		])
 		pass

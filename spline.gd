@@ -32,10 +32,14 @@ class Spline:
 	func set_current_cp(cp)->void:
 		_curr_index = cps.find(cp, 0)
 	func next_cp()->Object:
-		if _curr_index >= cps.size(): return null
 		_curr_index += 1
+		if _curr_index >= cps.size(): 
+			_curr_index -= 1#return i to it's last position
+			return null
 		return cps[_curr_index]
 	func prev_cp()->Object:
-		if _curr_index <= 0: return null
 		_curr_index -= 1
+		if _curr_index < 0: 
+			_curr_index += 1#return i to it's last position
+			return null
 		return cps[_curr_index]

@@ -137,22 +137,9 @@ class CP:
 		return _main_cp_host
 		pass
 		
-	#this will get the first host cp that is not a hook cp
-	#example a hook is the client of a normal cp that in turn
-	#is a client of another hook(from an unrealted spline)
-	#that in turn is a client of the main host cp
-	var FirstHostNoneHookCp:CP
-	func GetFirstHostNoneHookCp()->CP:
-		if FirstHostNoneHookCp != null: return FirstHostNoneHookCp
-		if _hosts_position:
-			FirstHostNoneHookCp = self
-		elif not host_cp.is_hook:
-			FirstHostNoneHookCp = host_cp
-		else:
-			FirstHostNoneHookCp = host_cp.get_main_cp_host()
-			
-		return FirstHostNoneHookCp
-		pass
+	func _ByCpNumber(a, b):
+		return a.cp_num < b.cp_num
+		
 		
 	#Used for hook cps to get how far the hook is from
 	#the main host cp
